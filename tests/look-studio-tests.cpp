@@ -1,5 +1,5 @@
-#include <cassert>
 #include <cmath>
+#include <cstdlib>
 #include <iostream>
 #include <string>
 
@@ -9,6 +9,15 @@
 
 #include "cube-parser.hpp"
 #include "look-library.hpp"
+
+#define TEST_ASSERT(cond)                                                          \
+	do {                                                                       \
+		if (!(cond)) {                                                     \
+			std::cerr << "Assertion failed: " #cond << " at "          \
+				  << __FILE__ << ":" << __LINE__ << std::endl;     \
+			std::exit(1);                                              \
+		}                                                                  \
+	} while (0)
 
 static void testSyntheticCubeParsing()
 {
@@ -28,28 +37,28 @@ static void testSyntheticCubeParsing()
 
 	CubeLut lut;
 	bool success = CubeParser::loadCubeFromString(synthCube, lut);
-	assert(success);
-	assert(lut.title == "Synthetic Identity");
-	assert(lut.size == 2);
-	assert(lut.isValid());
+	TEST_ASSERT(success);
+	TEST_ASSERT(lut.title == "Synthetic Identity");
+	TEST_ASSERT(lut.size == 2);
+	TEST_ASSERT(lut.isValid());
 
 	// Test boundary sampling
 	float r = 0, g = 0, b = 0;
 	lut.sample(0.0f, 0.0f, 0.0f, r, g, b);
-	assert(std::abs(r - 0.0f) < 0.001f);
-	assert(std::abs(g - 0.0f) < 0.001f);
-	assert(std::abs(b - 0.0f) < 0.001f);
+	TEST_ASSERT(std::abs(r - 0.0f) < 0.001f);
+	TEST_ASSERT(std::abs(g - 0.0f) < 0.001f);
+	TEST_ASSERT(std::abs(b - 0.0f) < 0.001f);
 
 	lut.sample(1.0f, 1.0f, 1.0f, r, g, b);
-	assert(std::abs(r - 1.0f) < 0.001f);
-	assert(std::abs(g - 1.0f) < 0.001f);
-	assert(std::abs(b - 1.0f) < 0.001f);
+	TEST_ASSERT(std::abs(r - 1.0f) < 0.001f);
+	TEST_ASSERT(std::abs(g - 1.0f) < 0.001f);
+	TEST_ASSERT(std::abs(b - 1.0f) < 0.001f);
 
 	// Test midpoint trilinear interpolation
 	lut.sample(0.5f, 0.5f, 0.5f, r, g, b);
-	assert(std::abs(r - 0.5f) < 0.01f);
-	assert(std::abs(g - 0.5f) < 0.01f);
-	assert(std::abs(b - 0.5f) < 0.01f);
+	TEST_ASSERT(std::abs(r - 0.5f) < 0.01f);
+	TEST_ASSERT(std::abs(g - 0.5f) < 0.01f);
+	TEST_ASSERT(std::abs(b - 0.5f) < 0.01f);
 
 	std::cout << "✓ Synthetic cube parsing & trilinear interpolation test passed." << std::endl;
 }
@@ -57,27 +66,27 @@ static void testSyntheticCubeParsing()
 static void testPresetLuts(const QString &dataPath)
 {
 	QDir looksDir(dataPath + "/looks");
-	assert(looksDir.exists());
+	TEST_ASSERT(looksDir.exists());
 
 	QStringList files = looksDir.entryList(QStringList() << "*.cube", QDir::Files);
-	assert(!files.isEmpty());
+	TEST_ASSERT(!files.isEmpty());
 	std::cout << "Found " << files.size() << " built-in .cube LUTs to verify..." << std::endl;
 
 	for (const QString &file : files) {
 		QString fullPath = looksDir.absoluteFilePath(file);
 		CubeLut lut;
 		bool ok = CubeParser::loadCubeFile(fullPath, lut);
-		assert(ok);
-		assert(lut.isValid());
-		assert(lut.size == 33);
+		TEST_ASSERT(ok);
+		TEST_ASSERT(lut.isValid());
+		TEST_ASSERT(lut.size == 33);
 
 		// Sample test in dark melanin skin tone region (R=0.35, G=0.22, B=0.15)
 		float r = 0, g = 0, b = 0;
 		lut.sample(0.35f, 0.22f, 0.15f, r, g, b);
-		assert(!std::isnan(r) && !std::isnan(g) && !std::isnan(b));
-		assert(r >= 0.0f && r <= 1.0f);
-		assert(g >= 0.0f && g <= 1.0f);
-		assert(b >= 0.0f && b <= 1.0f);
+		TEST_ASSERT(!std::isnan(r) && !std::isnan(g) && !std::isnan(b));
+		TEST_ASSERT(r >= 0.0f && r <= 1.0f);
+		TEST_ASSERT(g >= 0.0f && g <= 1.0f);
+		TEST_ASSERT(b >= 0.0f && b <= 1.0f);
 	}
 
 	std::cout << "✓ All " << files.size() << " built-in .cube LUT files verified successfully." << std::endl;
@@ -89,25 +98,25 @@ static void testLookLibrary(const QString &dataPath)
 	lib.initialize(dataPath);
 
 	auto allLooks = lib.getAllLooks();
-	assert(allLooks.size() >= 16);
+	TEST_ASSERT(allLooks.size() >= 16);
 
 	// Verify Wakanda Royal Gold
 	const LookItem *wakanda = lib.findLookById("wakanda-royal-gold");
-	assert(wakanda != nullptr);
-	assert(wakanda->category == "Iconic Movies");
-	assert(wakanda->title == "Wakanda Royal Gold");
+	TEST_ASSERT(wakanda != nullptr);
+	TEST_ASSERT(wakanda->category == "Iconic Movies");
+	TEST_ASSERT(wakanda->title == "Wakanda Royal Gold");
 
 	// Verify Afro Glow
 	const LookItem *afro = lib.findLookById("afro-glow");
-	assert(afro != nullptr);
-	assert(afro->category == "African Cinema");
+	TEST_ASSERT(afro != nullptr);
+	TEST_ASSERT(afro->category == "African Cinema");
 
 	// Verify categories
 	auto movieLooks = lib.getLooksByCategory("Iconic Movies");
-	assert(!movieLooks.empty());
+	TEST_ASSERT(!movieLooks.empty());
 
 	auto africanLooks = lib.getLooksByCategory("African Cinema");
-	assert(africanLooks.size() >= 4);
+	TEST_ASSERT(africanLooks.size() >= 4);
 
 	std::cout << "✓ LookLibrary catalog & categorization test passed." << std::endl;
 }

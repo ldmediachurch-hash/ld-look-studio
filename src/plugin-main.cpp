@@ -46,7 +46,7 @@ bool obs_module_load(void)
 	QMainWindow *mainWindow = static_cast<QMainWindow *>(obs_frontend_get_main_window());
 	if (mainWindow) {
 		g_lookDock = new LookStudioDock(mainWindow);
-		obs_frontend_add_dock(g_lookDock);
+		obs_frontend_add_dock_by_id("ld_look_studio_dock", "LD Look Studio", g_lookDock);
 
 		char *dataPath = obs_module_file("");
 		if (dataPath) {

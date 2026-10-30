@@ -665,5 +665,5 @@ obs_source_t *LookStudioDock::getSelectedSource() const
 	if (!sourceCombo_ || sourceCombo_->currentIndex() <= 0) {
 		return nullptr; // null applies to all active filters
 	}
-	return static_cast<obs_source_t *>(sourceCombo_->currentData().value<void *>());
+	return static_cast<obs_source_t *>(qvariant_cast<void *>(sourceCombo_->currentData()));
 }

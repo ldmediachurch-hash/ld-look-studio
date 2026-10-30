@@ -152,3 +152,4 @@ technique Draw
 		pixel_shader  = PSLookStudio(v_in);
 	}
 }
+

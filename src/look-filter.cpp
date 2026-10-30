@@ -40,7 +40,7 @@ static void free_filter_resources(LookFilterData *filter)
 		filter->clutTexture = nullptr;
 	}
 	if (filter->stageSurface) {
-		gs_stagesurf_destroy(filter->stageSurface);
+		gs_stagesurface_destroy(filter->stageSurface);
 		filter->stageSurface = nullptr;
 	}
 }
@@ -205,18 +205,18 @@ static void look_filter_render(void *data, gs_effect_t *effect)
 
 	// Capture snapshot if requested by operator
 	if (filter->captureSnapshotPending.exchange(false) && width > 0 && height > 0) {
-		gs_stagesurf_t *surf = gs_stagesurf_create(width, height, GS_RGBA);
+		gs_stagesurf_t *surf = gs_stagesurface_create(width, height, GS_RGBA);
 		if (surf) {
 			gs_texture_t *curTarget = gs_get_render_target();
 			if (curTarget) {
 				gs_stage_texture(surf, curTarget);
 				uint8_t *mappedData = nullptr;
 				uint32_t linesize = 0;
-				if (gs_stagesurf_map(surf, &mappedData, &linesize)) {
+				if (gs_stagesurface_map(surf, &mappedData, &linesize)) {
 					QImage captured(mappedData, static_cast<int>(width), static_cast<int>(height),
 							static_cast<int>(linesize), QImage::Format_RGBA8888);
 					QImage deepCopy = captured.copy();
-					gs_stagesurf_unmap(surf);
+					gs_stagesurface_unmap(surf);
 
 					if (s_snapshotManager) {
 						QMetaObject::invokeMethod(
@@ -230,7 +230,7 @@ static void look_filter_render(void *data, gs_effect_t *effect)
 					}
 				}
 			}
-			gs_stagesurf_destroy(surf);
+			gs_stagesurface_destroy(surf);
 		}
 	}
 
@@ -312,18 +312,23 @@ static void look_filter_defaults(obs_data_t *settings)
 	obs_data_set_default_bool(settings, "show_divider", true);
 }
 
-struct obs_source_info ld_look_studio_filter_info = {
-	.id = FILTER_ID,
-	.type = OBS_SOURCE_TYPE_FILTER,
-	.output_flags = OBS_SOURCE_VIDEO,
-	.get_name = look_filter_get_name,
-	.create = look_filter_create,
-	.destroy = look_filter_destroy,
-	.update = look_filter_update,
-	.get_properties = look_filter_properties,
-	.get_defaults = look_filter_defaults,
-	.video_render = look_filter_render,
-};
+static struct obs_source_info init_filter_info()
+{
+	struct obs_source_info info = {};
+	info.id = FILTER_ID;
+	info.type = OBS_SOURCE_TYPE_FILTER;
+	info.output_flags = OBS_SOURCE_VIDEO;
+	info.get_name = look_filter_get_name;
+	info.create = look_filter_create;
+	info.destroy = look_filter_destroy;
+	info.update = look_filter_update;
+	info.get_properties = look_filter_properties;
+	info.get_defaults = look_filter_defaults;
+	info.video_render = look_filter_render;
+	return info;
+}
+
+struct obs_source_info ld_look_studio_filter_info = init_filter_info();
 
 void look_filter_request_snapshot(obs_source_t *source)
 {

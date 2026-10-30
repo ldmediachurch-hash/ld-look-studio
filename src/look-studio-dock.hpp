@@ -1,5 +1,7 @@
 #pragma once
 
+#include <obs.h>
+
 #include <memory>
 #include <vector>
 
