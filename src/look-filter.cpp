@@ -4,6 +4,7 @@
 
 #include <obs-frontend-api.h>
 #include <graphics/graphics.h>
+#include <graphics/half.h>
 #include <util/bmem.h>
 #include <util/dstr.h>
 #include <util/platform.h>
@@ -15,6 +16,11 @@
 
 #include <QImage>
 #include <QMetaObject>
+
+static inline float srgb_to_linear(float u)
+{
+	return (u <= 0.04045f) ? (u / 12.92f) : powf((u + 0.055f) / 1.055f, 2.4f);
+}
 
 static std::mutex s_filterMutex;
 static std::vector<LookFilterData *> s_activeFilters;
@@ -92,18 +98,17 @@ static void load_clut_texture(LookFilterData *filter, const char *path)
 
 	obs_enter_graphics();
 
-	const uint8_t *floatPtr = reinterpret_cast<const uint8_t *>(lut.data.data());
-	filter->clutTexture = gs_voltexture_create(width, width, width, GS_RGBA32F, 1, &floatPtr, 0);
-
-	if (!filter->clutTexture) {
-		// Fallback to 8-bit RGBA texture
-		std::vector<uint8_t> u8data(width * width * width * 4);
-		for (size_t i = 0; i < u8data.size(); ++i) {
-			u8data[i] = static_cast<uint8_t>(std::clamp(lut.data[i], 0.0f, 1.0f) * 255.0f);
-		}
-		const uint8_t *u8ptr = u8data.data();
-		filter->clutTexture = gs_voltexture_create(width, width, width, GS_RGBA, 1, &u8ptr, 0);
+	const size_t totalVoxels = static_cast<size_t>(width * width * width);
+	std::vector<struct half> halfData(totalVoxels * 4);
+	for (size_t i = 0; i < totalVoxels; ++i) {
+		halfData[i * 4 + 0] = half_from_float(srgb_to_linear(lut.data[i * 4 + 0]));
+		halfData[i * 4 + 1] = half_from_float(srgb_to_linear(lut.data[i * 4 + 1]));
+		halfData[i * 4 + 2] = half_from_float(srgb_to_linear(lut.data[i * 4 + 2]));
+		halfData[i * 4 + 3] = half_from_bits(0x3c00); // 1.0
 	}
+
+	const uint8_t *halfPtr = reinterpret_cast<const uint8_t *>(halfData.data());
+	filter->clutTexture = gs_voltexture_create(width, width, width, GS_RGBA16F, 1, &halfPtr, 0);
 
 	obs_leave_graphics();
 }
@@ -199,7 +204,22 @@ static void look_filter_render(void *data, gs_effect_t *effect)
 	uint32_t width = obs_source_get_base_width(target);
 	uint32_t height = obs_source_get_base_height(target);
 
-	if (!obs_source_process_filter_begin(filter->context, GS_RGBA, OBS_ALLOW_DIRECT_RENDERING)) {
+	const enum gs_color_space preferred_spaces[] = {
+		GS_CS_SRGB,
+		GS_CS_SRGB_16F,
+		GS_CS_709_EXTENDED,
+	};
+
+	const enum gs_color_space source_space = obs_source_get_color_space(
+		obs_filter_get_target(filter->context), OBS_COUNTOF(preferred_spaces), preferred_spaces);
+	if (source_space == GS_CS_709_EXTENDED) {
+		obs_source_skip_video_filter(filter->context);
+		return;
+	}
+
+	const enum gs_color_format format = gs_get_format_from_space(source_space);
+	if (!obs_source_process_filter_begin_with_color_space(filter->context, format, source_space,
+							      OBS_ALLOW_DIRECT_RENDERING)) {
 		return;
 	}
 
@@ -276,7 +296,12 @@ static void look_filter_render(void *data, gs_effect_t *effect)
 	param = gs_effect_get_param_by_name(filter->effect, "screen_size");
 	gs_effect_set_vec2(param, &screenSize);
 
+	gs_blend_state_push();
+	gs_blend_function(GS_BLEND_ONE, GS_BLEND_INVSRCALPHA);
+
 	obs_source_process_filter_tech_end(filter->context, filter->effect, width, height, "Draw");
+
+	gs_blend_state_pop();
 }
 
 static obs_properties_t *look_filter_properties(void *data)
@@ -306,10 +331,27 @@ static void look_filter_defaults(obs_data_t *settings)
 {
 	obs_data_set_default_string(settings, "lut_path", "");
 	obs_data_set_default_double(settings, "intensity", 1.0);
-	obs_data_set_default_double(settings, "skin_protect", 0.5);
+	obs_data_set_default_double(settings, "skin_protect", 0.0);
 	obs_data_set_default_int(settings, "split_mode", 0);
 	obs_data_set_default_double(settings, "wipe_pos", 0.5);
 	obs_data_set_default_bool(settings, "show_divider", true);
+}
+
+static enum gs_color_space look_filter_get_color_space(void *data, size_t count,
+						       const enum gs_color_space *preferred_spaces)
+{
+	UNUSED_PARAMETER(count);
+	UNUSED_PARAMETER(preferred_spaces);
+
+	const enum gs_color_space potential_spaces[] = {
+		GS_CS_SRGB,
+		GS_CS_SRGB_16F,
+		GS_CS_709_EXTENDED,
+	};
+
+	LookFilterData *const filter = static_cast<LookFilterData *>(data);
+	return obs_source_get_color_space(obs_filter_get_target(filter->context), OBS_COUNTOF(potential_spaces),
+					  potential_spaces);
 }
 
 static struct obs_source_info init_filter_info()
@@ -325,6 +367,7 @@ static struct obs_source_info init_filter_info()
 	info.get_properties = look_filter_properties;
 	info.get_defaults = look_filter_defaults;
 	info.video_render = look_filter_render;
+	info.video_get_color_space = look_filter_get_color_space;
 	return info;
 }
 

@@ -127,21 +127,12 @@ QImage SnapshotManager::applyLutToImage(const QImage &src, const CubeLut &lut, f
 			float gr, gg, gb;
 			lut.sample(r, g, b, gr, gg, gb);
 
-			if (skinProtect > 0.001f) {
+			if (skinProtect > 0.01f) {
 				float skinMask = computeMelaninMaskCpu(r, g, b);
 				float protectWeight = skinMask * skinProtect;
-				float pr = lerpf(gr, r, protectWeight);
-				float pg = lerpf(gg, g, protectWeight);
-				float pb = lerpf(gb, b, protectWeight);
-
-				float melaninGlow = skinMask * 0.04f * skinProtect;
-				pr += melaninGlow * 1.05f;
-				pg += melaninGlow * 0.75f;
-				pb += melaninGlow * 0.35f;
-
-				gr = clamp01(pr);
-				gg = clamp01(pg);
-				gb = clamp01(pb);
+				gr = lerpf(gr, r, protectWeight);
+				gg = lerpf(gg, g, protectWeight);
+				gb = lerpf(gb, b, protectWeight);
 			}
 
 			float finalR = lerpf(r, gr, intensity);

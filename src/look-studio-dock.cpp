@@ -273,8 +273,8 @@ void LookStudioDock::setupUi()
 	skinLabel->setObjectName("paramLabel");
 	skinProtectSlider_ = new QSlider(Qt::Horizontal, mainContainer);
 	skinProtectSlider_->setRange(0, 100);
-	skinProtectSlider_->setValue(50);
-	skinProtectValueLabel_ = new QLabel("50%", mainContainer);
+	skinProtectSlider_->setValue(0);
+	skinProtectValueLabel_ = new QLabel("0%", mainContainer);
 	skinProtectValueLabel_->setFixedWidth(40);
 	skinProtectValueLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
 	connect(skinProtectSlider_, &QSlider::valueChanged, this, &LookStudioDock::onSkinProtectChanged);
@@ -505,7 +505,7 @@ void LookStudioDock::updateGalleryCards()
 		card->setIsLive(look.id.compare(activeLookId_, Qt::CaseInsensitive) == 0);
 
 		float intensity = intensitySlider_ ? (intensitySlider_->value() / 100.0f) : 1.0f;
-		float skinProtect = skinProtectSlider_ ? (skinProtectSlider_->value() / 100.0f) : 0.5f;
+		float skinProtect = skinProtectSlider_ ? (skinProtectSlider_->value() / 100.0f) : 0.0f;
 		QImage thumb = snapshotMgr_->getThumbnailForLook(look, intensity, skinProtect);
 		card->setThumbnail(thumb);
 
@@ -525,7 +525,7 @@ void LookStudioDock::updateGalleryCards()
 void LookStudioDock::onThumbnailsRegenerated()
 {
 	float intensity = intensitySlider_ ? (intensitySlider_->value() / 100.0f) : 1.0f;
-	float skinProtect = skinProtectSlider_ ? (skinProtectSlider_->value() / 100.0f) : 0.5f;
+	float skinProtect = skinProtectSlider_ ? (skinProtectSlider_->value() / 100.0f) : 0.0f;
 
 	for (auto *card : cardWidgets_) {
 		QImage thumb = snapshotMgr_->getThumbnailForLook(card->getLookItem(), intensity, skinProtect);
@@ -624,7 +624,7 @@ void LookStudioDock::onResetClicked()
 	}
 
 	intensitySlider_->setValue(100);
-	skinProtectSlider_->setValue(50);
+	skinProtectSlider_->setValue(0);
 	splitModeCombo_->setCurrentIndex(0);
 
 	obs_source_t *source = getSelectedSource();

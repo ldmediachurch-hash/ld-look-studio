@@ -117,27 +117,20 @@ float4 PSLookStudio(VertDataOut v_in) : TARGET
 		return origTexel; // Display un-graded upstream input
 	}
 
-	// 3D LUT Sampling
+	// 3D LUT Sampling (unmultiplied is in linear RGB)
 	float3 nonlinear = srgb_linear_to_nonlinear(unmultiplied);
 	float3 clut_uvw = saturate(nonlinear * clut_scale + clut_offset);
 	float3 graded = clut_3d.Sample(textureSampler, clut_uvw).rgb;
 
 	// Melanin & African Skin Tone Isolation & Preservation
-	if (skin_protect > 0.001) {
+	// When skin_protect is increased, restores natural warm skin undertones if an extreme grade shifts them
+	if (skin_protect > 0.01) {
 		float skin_mask = compute_melanin_mask(unmultiplied);
 		float protect_weight = skin_mask * skin_protect;
-
-		// Preserve warm bronze/amber skin undertone and prevent greenish or ashen cast
-		float3 protected_skin = lerp(graded, unmultiplied, protect_weight);
-
-		// Subtle natural luminance roll-off for radiant glowing highlights
-		float melanin_glow = skin_mask * 0.04 * skin_protect;
-		protected_skin += float3(melanin_glow * 1.05, melanin_glow * 0.75, melanin_glow * 0.35);
-
-		graded = protected_skin;
+		graded = lerp(graded, unmultiplied, protect_weight);
 	}
 
-	// Mix Intensity
+	// Mix Intensity (physically correct linear blend)
 	float3 final_rgb = lerp(unmultiplied, graded, saturate(intensity));
 	final_rgb *= alpha;
 
