@@ -1,10 +1,10 @@
+#include "half-float.hpp"
 #include "look-filter.hpp"
 #include "look-library.hpp"
 #include "snapshot-manager.hpp"
 
 #include <obs-frontend-api.h>
 #include <graphics/graphics.h>
-#include <graphics/half.h>
 #include <util/bmem.h>
 #include <util/dstr.h>
 #include <util/platform.h>
@@ -99,12 +99,12 @@ static void load_clut_texture(LookFilterData *filter, const char *path)
 	obs_enter_graphics();
 
 	const size_t totalVoxels = static_cast<size_t>(width * width * width);
-	std::vector<struct half> halfData(totalVoxels * 4);
+	std::vector<struct ld_half> halfData(totalVoxels * 4);
 	for (size_t i = 0; i < totalVoxels; ++i) {
-		halfData[i * 4 + 0] = half_from_float(srgb_to_linear(lut.data[i * 4 + 0]));
-		halfData[i * 4 + 1] = half_from_float(srgb_to_linear(lut.data[i * 4 + 1]));
-		halfData[i * 4 + 2] = half_from_float(srgb_to_linear(lut.data[i * 4 + 2]));
-		halfData[i * 4 + 3] = half_from_bits(0x3c00); // 1.0
+		halfData[i * 4 + 0] = ld_half_from_float(srgb_to_linear(lut.data[i * 4 + 0]));
+		halfData[i * 4 + 1] = ld_half_from_float(srgb_to_linear(lut.data[i * 4 + 1]));
+		halfData[i * 4 + 2] = ld_half_from_float(srgb_to_linear(lut.data[i * 4 + 2]));
+		halfData[i * 4 + 3] = ld_half_from_bits(0x3c00); // 1.0
 	}
 
 	const uint8_t *halfPtr = reinterpret_cast<const uint8_t *>(halfData.data());

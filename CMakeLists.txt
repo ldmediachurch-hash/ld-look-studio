@@ -41,6 +41,7 @@ target_sources(
     src/plugin-main.cpp
     src/cube-parser.cpp
     src/cube-parser.hpp
+    src/half-float.hpp
     src/look-library.cpp
     src/look-library.hpp
     src/look-filter.cpp
@@ -64,6 +65,7 @@ if(BUILD_TESTS)
     tests/look-studio-tests.cpp
     src/cube-parser.cpp
     src/cube-parser.hpp
+    src/half-float.hpp
     src/look-library.cpp
     src/look-library.hpp
   )

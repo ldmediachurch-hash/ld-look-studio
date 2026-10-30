@@ -8,6 +8,7 @@
 #include <QFileInfo>
 
 #include "cube-parser.hpp"
+#include "half-float.hpp"
 #include "look-library.hpp"
 
 #define TEST_ASSERT(cond)                                                          \
@@ -121,6 +122,23 @@ static void testLookLibrary(const QString &dataPath)
 	std::cout << "✓ LookLibrary catalog & categorization test passed." << std::endl;
 }
 
+static void testHalfFloatConversion()
+{
+	struct ld_half zero = ld_half_from_float(0.0f);
+	TEST_ASSERT(zero.u == 0x0000);
+
+	struct ld_half one = ld_half_from_float(1.0f);
+	TEST_ASSERT(one.u == 0x3c00);
+
+	struct ld_half half_val = ld_half_from_float(0.5f);
+	TEST_ASSERT(half_val.u == 0x3800);
+
+	struct ld_half raw = ld_half_from_bits(0x3c00);
+	TEST_ASSERT(raw.u == 0x3c00);
+
+	std::cout << "✓ 16-bit Half-Float precision conversion test passed." << std::endl;
+}
+
 int main(int argc, char *argv[])
 {
 	QCoreApplication app(argc, argv);
@@ -129,6 +147,7 @@ int main(int argc, char *argv[])
 	std::cout << "Running LD Look Studio Test Suite..." << std::endl;
 	std::cout << "===========================================" << std::endl;
 
+	testHalfFloatConversion();
 	testSyntheticCubeParsing();
 
 	QString dataPath = QDir::currentPath() + "/data";
