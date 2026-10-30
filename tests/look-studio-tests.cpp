@@ -1,0 +1,140 @@
+#include <cassert>
+#include <cmath>
+#include <iostream>
+#include <string>
+
+#include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
+
+#include "cube-parser.hpp"
+#include "look-library.hpp"
+
+static void testSyntheticCubeParsing()
+{
+	std::string synthCube = "# Synthetic Test 2x2x2 Cube LUT\n"
+				"TITLE \"Synthetic Identity\"\n"
+				"LUT_3D_SIZE 2\n"
+				"DOMAIN_MIN 0.0 0.0 0.0\n"
+				"DOMAIN_MAX 1.0 1.0 1.0\n"
+				"0.0 0.0 0.0\n"
+				"1.0 0.0 0.0\n"
+				"0.0 1.0 0.0\n"
+				"1.0 1.0 0.0\n"
+				"0.0 0.0 1.0\n"
+				"1.0 0.0 1.0\n"
+				"0.0 1.0 1.0\n"
+				"1.0 1.0 1.0\n";
+
+	CubeLut lut;
+	bool success = CubeParser::loadCubeFromString(synthCube, lut);
+	assert(success);
+	assert(lut.title == "Synthetic Identity");
+	assert(lut.size == 2);
+	assert(lut.isValid());
+
+	// Test boundary sampling
+	float r = 0, g = 0, b = 0;
+	lut.sample(0.0f, 0.0f, 0.0f, r, g, b);
+	assert(std::abs(r - 0.0f) < 0.001f);
+	assert(std::abs(g - 0.0f) < 0.001f);
+	assert(std::abs(b - 0.0f) < 0.001f);
+
+	lut.sample(1.0f, 1.0f, 1.0f, r, g, b);
+	assert(std::abs(r - 1.0f) < 0.001f);
+	assert(std::abs(g - 1.0f) < 0.001f);
+	assert(std::abs(b - 1.0f) < 0.001f);
+
+	// Test midpoint trilinear interpolation
+	lut.sample(0.5f, 0.5f, 0.5f, r, g, b);
+	assert(std::abs(r - 0.5f) < 0.01f);
+	assert(std::abs(g - 0.5f) < 0.01f);
+	assert(std::abs(b - 0.5f) < 0.01f);
+
+	std::cout << "✓ Synthetic cube parsing & trilinear interpolation test passed." << std::endl;
+}
+
+static void testPresetLuts(const QString &dataPath)
+{
+	QDir looksDir(dataPath + "/looks");
+	assert(looksDir.exists());
+
+	QStringList files = looksDir.entryList(QStringList() << "*.cube", QDir::Files);
+	assert(!files.isEmpty());
+	std::cout << "Found " << files.size() << " built-in .cube LUTs to verify..." << std::endl;
+
+	for (const QString &file : files) {
+		QString fullPath = looksDir.absoluteFilePath(file);
+		CubeLut lut;
+		bool ok = CubeParser::loadCubeFile(fullPath, lut);
+		assert(ok);
+		assert(lut.isValid());
+		assert(lut.size == 33);
+
+		// Sample test in dark melanin skin tone region (R=0.35, G=0.22, B=0.15)
+		float r = 0, g = 0, b = 0;
+		lut.sample(0.35f, 0.22f, 0.15f, r, g, b);
+		assert(!std::isnan(r) && !std::isnan(g) && !std::isnan(b));
+		assert(r >= 0.0f && r <= 1.0f);
+		assert(g >= 0.0f && g <= 1.0f);
+		assert(b >= 0.0f && b <= 1.0f);
+	}
+
+	std::cout << "✓ All " << files.size() << " built-in .cube LUT files verified successfully." << std::endl;
+}
+
+static void testLookLibrary(const QString &dataPath)
+{
+	LookLibrary lib;
+	lib.initialize(dataPath);
+
+	auto allLooks = lib.getAllLooks();
+	assert(allLooks.size() >= 16);
+
+	// Verify Wakanda Royal Gold
+	const LookItem *wakanda = lib.findLookById("wakanda-royal-gold");
+	assert(wakanda != nullptr);
+	assert(wakanda->category == "Iconic Movies");
+	assert(wakanda->title == "Wakanda Royal Gold");
+
+	// Verify Afro Glow
+	const LookItem *afro = lib.findLookById("afro-glow");
+	assert(afro != nullptr);
+	assert(afro->category == "African Cinema");
+
+	// Verify categories
+	auto movieLooks = lib.getLooksByCategory("Iconic Movies");
+	assert(!movieLooks.empty());
+
+	auto africanLooks = lib.getLooksByCategory("African Cinema");
+	assert(africanLooks.size() >= 4);
+
+	std::cout << "✓ LookLibrary catalog & categorization test passed." << std::endl;
+}
+
+int main(int argc, char *argv[])
+{
+	QCoreApplication app(argc, argv);
+
+	std::cout << "===========================================" << std::endl;
+	std::cout << "Running LD Look Studio Test Suite..." << std::endl;
+	std::cout << "===========================================" << std::endl;
+
+	testSyntheticCubeParsing();
+
+	QString dataPath = QDir::currentPath() + "/data";
+	if (!QDir(dataPath).exists()) {
+		dataPath = app.applicationDirPath() + "/../data";
+	}
+	if (!QDir(dataPath).exists()) {
+		dataPath = "/Users/GeneralD/.gemini/antigravity-ide/scratch/lastdmedia/ld-look-studio/data";
+	}
+
+	testPresetLuts(dataPath);
+	testLookLibrary(dataPath);
+
+	std::cout << "===========================================" << std::endl;
+	std::cout << "ALL 3 TEST SUITES PASSED CLEANLY (100% OK)!" << std::endl;
+	std::cout << "===========================================" << std::endl;
+	return 0;
+}

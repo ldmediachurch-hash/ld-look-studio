@@ -1,0 +1,154 @@
+uniform float4x4 ViewProj;
+uniform texture2d image;
+
+uniform texture3d clut_3d;
+uniform float intensity;
+uniform float skin_protect;
+uniform float3 clut_scale;
+uniform float3 clut_offset;
+uniform float3 domain_min;
+uniform float3 domain_max;
+
+// Split wipe comparison:
+// split_mode: 0 = Off (full graded), 1 = Horizontal Split (Left: Original, Right: Graded), 2 = Vertical Split
+uniform int split_mode;
+uniform float wipe_pos;
+uniform float show_divider;
+uniform float2 screen_size;
+
+sampler_state textureSampler {
+	Filter    = Linear;
+	AddressU  = Clamp;
+	AddressV  = Clamp;
+	AddressW  = Clamp;
+};
+
+struct VertDataIn {
+	float4 pos : POSITION;
+	float2 uv  : TEXCOORD0;
+};
+
+struct VertDataOut {
+	float4 pos : POSITION;
+	float2 uv  : TEXCOORD0;
+};
+
+VertDataOut VSDefault(VertDataIn v_in)
+{
+	VertDataOut vert_out;
+	vert_out.uv = v_in.uv;
+	vert_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+	return vert_out;
+}
+
+float srgb_linear_to_nonlinear_channel(float u)
+{
+	return (u <= 0.0031308) ? (12.92 * u) : ((1.055 * pow(max(u, 0.0), 1.0 / 2.4)) - 0.055);
+}
+
+float3 srgb_linear_to_nonlinear(float3 v)
+{
+	return float3(
+		srgb_linear_to_nonlinear_channel(v.r),
+		srgb_linear_to_nonlinear_channel(v.g),
+		srgb_linear_to_nonlinear_channel(v.b)
+	);
+}
+
+// Melanin and African skin tone protection mask
+// Evaluates chrominance angle and luminance in YCbCr space
+float compute_melanin_mask(float3 rgb)
+{
+	float y  = 0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b;
+	float cb = -0.168736 * rgb.r - 0.331264 * rgb.g + 0.500 * rgb.b;
+	float cr = 0.500 * rgb.r - 0.418688 * rgb.g - 0.081312 * rgb.b;
+
+	// Skin tone line: Cr positive, Cb negative (warm reddish/amber hue)
+	// Typical skin angle: atan2(Cr, -Cb) ~ 1.95 rad (~112 degrees)
+	float angle = atan2(cr, -cb);
+	float angle_diff = abs(angle - 1.95);
+	float hue_score = saturate(1.0 - angle_diff / 0.55);
+
+	// Melanin skin luminance range: 12% to 65% IRE (smooth boundaries)
+	float lum_score = smoothstep(0.08, 0.18, y) * (1.0 - smoothstep(0.60, 0.85, y));
+
+	// Chroma magnitude
+	float chroma_len = length(float2(cb, cr));
+	float chroma_score = smoothstep(0.02, 0.06, chroma_len);
+
+	// Subtractive highlight protection: prevents chalky specular clipping on dark skin
+	float highlight_protect = 1.0 - smoothstep(0.70, 0.95, y);
+
+	return saturate(hue_score * lum_score * chroma_score * highlight_protect);
+}
+
+float4 PSLookStudio(VertDataOut v_in) : TARGET
+{
+	float4 origTexel = image.Sample(textureSampler, v_in.uv);
+	float alpha = origTexel.a;
+	float3 unmultiplied = origTexel.rgb * ((alpha > 0.0) ? (1.0 / alpha) : 0.0);
+
+	// A/B Split Screen Wipe Evaluation
+	bool is_split_before = false;
+	bool is_divider = false;
+	float divider_thickness = (screen_size.x > 0.0) ? (2.0 / screen_size.x) : 0.002;
+
+	if (split_mode == 1) { // Horizontal Wipe
+		float dist = abs(v_in.uv.x - wipe_pos);
+		if (show_divider > 0.5 && dist <= divider_thickness) {
+			is_divider = true;
+		} else if (v_in.uv.x < wipe_pos) {
+			is_split_before = true;
+		}
+	} else if (split_mode == 2) { // Vertical Wipe
+		float v_dist = abs(v_in.uv.y - wipe_pos);
+		if (show_divider > 0.5 && v_dist <= divider_thickness) {
+			is_divider = true;
+		} else if (v_in.uv.y < wipe_pos) {
+			is_split_before = true;
+		}
+	}
+
+	if (is_divider) {
+		return float4(1.0, 1.0, 1.0, alpha); // Crisp white comparison bar
+	}
+
+	if (is_split_before) {
+		return origTexel; // Display un-graded upstream input
+	}
+
+	// 3D LUT Sampling
+	float3 nonlinear = srgb_linear_to_nonlinear(unmultiplied);
+	float3 clut_uvw = saturate(nonlinear * clut_scale + clut_offset);
+	float3 graded = clut_3d.Sample(textureSampler, clut_uvw).rgb;
+
+	// Melanin & African Skin Tone Isolation & Preservation
+	if (skin_protect > 0.001) {
+		float skin_mask = compute_melanin_mask(unmultiplied);
+		float protect_weight = skin_mask * skin_protect;
+
+		// Preserve warm bronze/amber skin undertone and prevent greenish or ashen cast
+		float3 protected_skin = lerp(graded, unmultiplied, protect_weight);
+
+		// Subtle natural luminance roll-off for radiant glowing highlights
+		float melanin_glow = skin_mask * 0.04 * skin_protect;
+		protected_skin += float3(melanin_glow * 1.05, melanin_glow * 0.75, melanin_glow * 0.35);
+
+		graded = protected_skin;
+	}
+
+	// Mix Intensity
+	float3 final_rgb = lerp(unmultiplied, graded, saturate(intensity));
+	final_rgb *= alpha;
+
+	return float4(final_rgb, alpha);
+}
+
+technique Draw
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader  = PSLookStudio(v_in);
+	}
+}
